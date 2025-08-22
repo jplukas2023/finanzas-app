@@ -93,7 +93,24 @@ with st.sidebar:
 
     st.divider()
     st.header("🏷️ Categorías")
-    default_gastos = "\n".join(["Comida", "Transporte", "Renta", "Servicios", "Salud", "Entretenimiento", "Educación", "Otros"])    
+    default_gastos = "\n".join([
+        "Comida / Supermercado",
+        "Transporte / Gasolina",
+        "Vivienda / Renta / Hipoteca",
+        "Servicios (agua, luz, internet, tel)",
+        "Salud / Medicinas",
+        "Educación / Cursos / Libros",
+        "Entretenimiento / Streaming / Hobbies",
+        "Ropa / Compras personales",
+        "Viajes / Vacaciones",
+        "Mascotas",
+        "Suscripciones / Apps",
+        "Mantenimiento del hogar",
+        "Regalos / Donaciones",
+        "Impuestos / Trámites",
+        "Tarjetas / Intereses / Comisiones",
+        "Otros"
+    ])    
     default_ingresos = "\n".join(["Salario", "Freelance", "Intereses", "Reembolsos", "Otros"])    
     gastos_list = st.text_area("Gastos (una por línea)", value=default_gastos, height=150)
     ingresos_list = st.text_area("Ingresos (una por línea)", value=default_ingresos, height=120)
@@ -120,13 +137,23 @@ except Exception as e:
 # 🧩 Helpers de IO
 # -------------------------------
 @st.cache_data(ttl=20)
-def load_df(ws: gspread.Worksheet) -> pd.DataFrame:
-    values = ws.get_all_values()
+def load_df_by_name(sheet_id: str, ws_title: str) -> pd.DataFrame:
+    """Carga datos desde una worksheet de Google Sheets identificada por nombre.
+    Usa solo strings como parámetros (hashables) para evitar errores de cache.
+    """
+    try:
+        gc = get_gspread_client()
+        sh = gc.open_by_key(sheet_id)
+        ws = sh.worksheet(ws_title)
+        values = ws.get_all_values()
+    except Exception:
+        values = []
+
     if not values:
         return pd.DataFrame(columns=["id", "fecha", "categoria", "monto", "nota", "tags", "usuario", "ts"])    
+
     df = pd.DataFrame(values[1:], columns=[c.strip() for c in values[0]])
     if not df.empty:
-        # Tipos
         if "monto" in df.columns:
             df["monto"] = pd.to_numeric(df["monto"], errors="coerce").fillna(0)
         if "fecha" in df.columns:
@@ -134,8 +161,8 @@ def load_df(ws: gspread.Worksheet) -> pd.DataFrame:
     return df
 
 
-def next_id(ws: gspread.Worksheet) -> int:
-    df = load_df(ws)
+def next_id(ws_title: str) -> int:
+    df = load_df_by_name(sheet_id, ws_title)
     if df.empty:
         return 1
     try:
@@ -172,7 +199,7 @@ with tab1:
             submitted_g = st.form_submit_button("Guardar gasto", type="primary")
         if submitted_g:
             if monto_g > 0 and cat_g:
-                rid = next_id(gastos_ws)
+                rid = next_id("gastos")
                 append_row(gastos_ws, {
                     "id": rid,
                     "fecha": fecha_g.isoformat(),
@@ -199,7 +226,7 @@ with tab1:
             submitted_i = st.form_submit_button("Guardar ingreso", type="primary")
         if submitted_i:
             if monto_i > 0 and cat_i:
-                rid = next_id(ingresos_ws)
+                rid = next_id("ingresos")
                 append_row(ingresos_ws, {
                     "id": rid,
                     "fecha": fecha_i.isoformat(),
@@ -220,7 +247,7 @@ with tab1:
 # ===============================
 with tab2:
     st.subheader("Gastos")
-    gdf = load_df(gastos_ws)
+    gdf = load_df_by_name(sheet_id, "gastos")
     if gdf.empty:
         st.info("No hay gastos aún.")
     else:
@@ -245,7 +272,7 @@ with tab2:
 
     st.divider()
     st.subheader("Ingresos")
-    idf = load_df(ingresos_ws)
+    idf = load_df_by_name(sheet_id, "ingresos")
     if idf.empty:
         st.info("No hay ingresos aún.")
     else:
@@ -272,8 +299,8 @@ with tab2:
 # 📈 TAB 3: Reportes (A, B, C, D, E)
 # ===============================
 with tab3:
-    gdf = load_df(gastos_ws)
-    idf = load_df(ingresos_ws)
+    gdf = load_df_by_name(sheet_id, "gastos")
+    idf = load_df_by_name(sheet_id, "ingresos")
 
     def add_period(df: pd.DataFrame) -> pd.DataFrame:
         if df.empty:
