@@ -81,7 +81,13 @@ def ensure_sheets(gc: gspread.Client, sheet_id: str) -> Tuple[gspread.Worksheet,
 # -------------------------------
 with st.sidebar:
     st.header("🔗 Conexión a Google Sheets")
-    sheet_id = st.text_input("SHEET ID (de la URL)", value=st.secrets.get("sheet_id", ""))
+    # Si viene desde Secrets, úsalo y evita pedirlo en móvil
+    if "sheet_id" in st.secrets and st.secrets.get("sheet_id"):
+        sheet_id = st.secrets.get("sheet_id")
+        st.success("Usando Sheet ID desde Secrets (no necesitas pegarlo en el celular)")
+        st.caption(f"Sheet conectado: {sheet_id[:6]}…{sheet_id[-4:]}")
+    else:
+        sheet_id = st.text_input("SHEET ID (de la URL)", value="")
     st.caption("Ejemplo de URL: https://docs.google.com/spreadsheets/d/SELESTEID/edit … → copia la parte SELESTEID")
 
     if not sheet_id:
@@ -89,11 +95,18 @@ with st.sidebar:
 
     st.divider()
     st.header("👤 Preferencias de usuario")
-    default_user = st.text_input("Nombre/Iniciales para registrar (multiusuario)", value="JP")
+    # Permitir definir usuario por query param ?user=JP o ?u=JP
+    try:
+        params = st.query_params if hasattr(st, "query_params") else st.experimental_get_query_params()
+    except Exception:
+        params = {}
+    qp_user = (params.get("user") or params.get("u") or [""])[0] if isinstance(params, dict) else ""
+    default_user = st.text_input("Nombre/Iniciales para registrar (multiusuario)", value=(qp_user or "JP"))
 
     st.divider()
     st.header("🏷️ Categorías")
-    default_gastos = "\n".join([
+    default_gastos = "
+".join([
         "Comida / Supermercado",
         "Transporte / Gasolina",
         "Vivienda / Renta / Hipoteca",
@@ -111,7 +124,16 @@ with st.sidebar:
         "Tarjetas / Intereses / Comisiones",
         "Otros"
     ])    
-    default_ingresos = "\n".join(["Salario", "Freelance", "Intereses", "Reembolsos", "Otros"])    
+    default_ingresos = "
+".join([
+        "Salario",
+        "Freelance / Consultoría",
+        "Ventas extra / Negocio",
+        "Bonos / Aguinaldo",
+        "Intereses / Inversiones",
+        "Reembolsos",
+        "Otros ingresos"
+    ])    
     gastos_list = st.text_area("Gastos (una por línea)", value=default_gastos, height=150)
     ingresos_list = st.text_area("Ingresos (una por línea)", value=default_ingresos, height=120)
 
@@ -211,7 +233,7 @@ with tab1:
                     "ts": datetime.utcnow().isoformat()
                 })
                 st.success(f"Gasto #{rid} guardado ✅")
-                load_df.clear()  # invalidar caché
+                load_df_by_name.clear()  # invalidar caché
             else:
                 st.error("Verifica monto (>0) y categoría.")
 
@@ -238,7 +260,7 @@ with tab1:
                     "ts": datetime.utcnow().isoformat()
                 })
                 st.success(f"Ingreso #{rid} guardado ✅")
-                load_df.clear()
+                load_df_by_name.clear()
             else:
                 st.error("Verifica monto (>0) y categoría.")
 
