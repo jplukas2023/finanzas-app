@@ -116,46 +116,41 @@ with st.sidebar:
     st.divider()
     st.header("🏷️ Categorías")
 
-    default_gastos = "
-".join(
-        [
-            "Comida / Supermercado",
-            "Transporte / Gasolina",
-            "Vivienda / Renta / Hipoteca",
-            "Servicios (agua, luz, internet, tel)",
-            "Salud / Medicinas",
-            "Educación / Cursos / Libros",
-            "Entretenimiento / Streaming / Hobbies",
-            "Ropa / Compras personales",
-            "Viajes / Vacaciones",
-            "Mascotas",
-            "Suscripciones / Apps",
-            "Mantenimiento del hogar",
-            "Regalos / Donaciones",
-            "Impuestos / Trámites",
-            "Tarjetas / Intereses / Comisiones",
-            "Otros",
-        ]
-    )
+st.header("🏷️ Categorías")
 
-    default_ingresos = "
-".join(
-        [
-            "Salario",
-            "Freelance / Consultoría",
-            "Ventas extra / Negocio",
-            "Bonos / Aguinaldo",
-            "Intereses / Inversiones",
-            "Reembolsos",
-            "Otros ingresos",
-        ]
-    )
+# Usamos comillas triple para evitar errores de comillas al copiar/pegar
+default_gastos = """Comida / Supermercado
+Transporte / Gasolina
+Vivienda / Renta / Hipoteca
+Servicios (agua, luz, internet, tel)
+Salud / Medicinas
+Educación / Cursos / Libros
+Entretenimiento / Streaming / Hobbies
+Ropa / Compras personales
+Viajes / Vacaciones
+Mascotas
+Suscripciones / Apps
+Mantenimiento del hogar
+Regalos / Donaciones
+Impuestos / Trámites
+Tarjetas / Intereses / Comisiones
+Otros
+"""
 
-    gastos_list = st.text_area("Gastos (una por línea)", value=default_gastos, height=150)
-    ingresos_list = st.text_area("Ingresos (una por línea)", value=default_ingresos, height=120)
+default_ingresos = """Salario
+Freelance / Consultoría
+Ventas extra / Negocio
+Bonos / Aguinaldo
+Intereses / Inversiones
+Reembolsos
+Otros ingresos
+"""
 
-    categorias_g = [c.strip() for c in gastos_list.splitlines() if c.strip()]
-    categorias_i = [c.strip() for c in ingresos_list.splitlines() if c.strip()]
+gastos_list = st.text_area("Gastos (una por línea)", value=default_gastos, height=150)
+ingresos_list = st.text_area("Ingresos (una por línea)", value=default_ingresos, height=120)
+
+categorias_g = [c.strip() for c in gastos_list.splitlines() if c.strip()]
+categorias_i = [c.strip() for c in ingresos_list.splitlines() if c.strip()]
 
 
 if not sheet_id:
