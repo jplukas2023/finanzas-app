@@ -1,3 +1,4 @@
+
 import os
 from datetime import date, datetime
 from typing import Tuple
@@ -114,10 +115,11 @@ with st.sidebar:
     )
 
     st.divider()
-    st.header("🏷️ Categorías")
+    with st.expander("🏷️ Categorías (opcional)", expanded=False):
+        st.caption("Editá estas listas solo si querés personalizar; si no, podés ignorarlo.")
 
-# Usamos comillas triple para evitar errores de comillas al copiar/pegar
-default_gastos = """Comida / Supermercado
+        # Usamos comillas triple para evitar errores de comillas al copiar/pegar
+        default_gastos = """Comida / Supermercado
 Transporte / Gasolina
 Vivienda / Renta / Hipoteca
 Servicios (agua, luz, internet, tel)
@@ -135,7 +137,7 @@ Tarjetas / Intereses / Comisiones
 Otros
 """
 
-default_ingresos = """Salario
+        default_ingresos = """Salario
 Freelance / Consultoría
 Ventas extra / Negocio
 Bonos / Aguinaldo
@@ -144,13 +146,13 @@ Reembolsos
 Otros ingresos
 """
 
-gastos_list = st.text_area("Gastos (una por línea)", value=default_gastos, height=150)
-ingresos_list = st.text_area("Ingresos (una por línea)", value=default_ingresos, height=120)
+        gastos_list = st.text_area("Gastos (una por línea)", value=default_gastos, height=150)
+        ingresos_list = st.text_area("Ingresos (una por línea)", value=default_ingresos, height=120)
 
-categorias_g = [c.strip() for c in gastos_list.splitlines() if c.strip()]
-categorias_i = [c.strip() for c in ingresos_list.splitlines() if c.strip()]
+    categorias_g = [c.strip() for c in (gastos_list if 'gastos_list' in locals() else "").splitlines() if c.strip()]
+    categorias_i = [c.strip() for c in (ingresos_list if 'ingresos_list' in locals() else "").splitlines() if c.strip()]
 
-
+# Si no hay sheet_id, detener (evita mostrar el resto)
 if not sheet_id:
     st.stop()
 
@@ -229,7 +231,7 @@ with tab1:
         st.subheader("Gasto rápido")
         with st.form("form_gasto"):
             fecha_g = st.date_input("Fecha", value=date.today())
-            cat_g = st.selectbox("Categoría", categorias_g, index=0)
+            cat_g = st.selectbox("Categoría", categorias_g or ["Comida / Supermercado"], index=0)
             monto_g = st.number_input("Monto (Q)", min_value=0.0, step=1.0)
             nota_g = st.text_input("Nota (opcional)")
             tags_g = st.text_input("Tags (separados por coma)")
@@ -259,7 +261,7 @@ with tab1:
         st.subheader("Ingreso")
         with st.form("form_ingreso"):
             fecha_i = st.date_input("Fecha", value=date.today(), key="fecha_i")
-            cat_i = st.selectbox("Categoría", categorias_i, index=0, key="cat_i")
+            cat_i = st.selectbox("Categoría", categorias_i or ["Salario"], index=0, key="cat_i")
             monto_i = st.number_input("Monto (Q)", min_value=0.0, step=1.0, key="monto_i")
             nota_i = st.text_input("Nota (opcional)", key="nota_i")
             tags_i = st.text_input("Tags (separados por coma)", key="tags_i")
