@@ -116,8 +116,6 @@ with st.sidebar:
     st.divider()
     st.header("🏷️ Categorías")
 
-st.header("🏷️ Categorías")
-
 # Usamos comillas triple para evitar errores de comillas al copiar/pegar
 default_gastos = """Comida / Supermercado
 Transporte / Gasolina
