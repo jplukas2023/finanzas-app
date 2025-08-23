@@ -105,40 +105,42 @@ with st.sidebar:
 
     st.divider()
     st.header("🏷️ Categorías")
-    default_gastos = "
-".join([
-        "Comida / Supermercado",
-        "Transporte / Gasolina",
-        "Vivienda / Renta / Hipoteca",
-        "Servicios (agua, luz, internet, tel)",
-        "Salud / Medicinas",
-        "Educación / Cursos / Libros",
-        "Entretenimiento / Streaming / Hobbies",
-        "Ropa / Compras personales",
-        "Viajes / Vacaciones",
-        "Mascotas",
-        "Suscripciones / Apps",
-        "Mantenimiento del hogar",
-        "Regalos / Donaciones",
-        "Impuestos / Trámites",
-        "Tarjetas / Intereses / Comisiones",
-        "Otros"
-    ])    
-    default_ingresos = "
-".join([
-        "Salario",
-        "Freelance / Consultoría",
-        "Ventas extra / Negocio",
-        "Bonos / Aguinaldo",
-        "Intereses / Inversiones",
-        "Reembolsos",
-        "Otros ingresos"
-    ])    
-    gastos_list = st.text_area("Gastos (una por línea)", value=default_gastos, height=150)
-    ingresos_list = st.text_area("Ingresos (una por línea)", value=default_ingresos, height=120)
+    st.header("🏷️ Categorías")
 
-    categorias_g = [c.strip() for c in gastos_list.splitlines() if c.strip()]
-    categorias_i = [c.strip() for c in ingresos_list.splitlines() if c.strip()]
+default_gastos = "\n".join([
+    "Comida / Supermercado",
+    "Transporte / Gasolina",
+    "Vivienda / Renta / Hipoteca",
+    "Servicios (agua, luz, internet, tel)",
+    "Salud / Medicinas",
+    "Educación / Cursos / Libros",
+    "Entretenimiento / Streaming / Hobbies",
+    "Ropa / Compras personales",
+    "Viajes / Vacaciones",
+    "Mascotas",
+    "Suscripciones / Apps",
+    "Mantenimiento del hogar",
+    "Regalos / Donaciones",
+    "Impuestos / Trámites",
+    "Tarjetas / Intereses / Comisiones",
+    "Otros",
+])
+
+default_ingresos = "\n".join([
+    "Salario",
+    "Freelance / Consultoría",
+    "Ventas extra / Negocio",
+    "Bonos / Aguinaldo",
+    "Intereses / Inversiones",
+    "Reembolsos",
+    "Otros ingresos",
+])
+
+gastos_list = st.text_area("Gastos (una por línea)", value=default_gastos, height=150)
+ingresos_list = st.text_area("Ingresos (una por línea)", value=default_ingresos, height=120)
+
+categorias_g = [c.strip() for c in gastos_list.splitlines() if c.strip()]
+categorias_i = [c.strip() for c in ingresos_list.splitlines() if c.strip()]
 
 
 if not sheet_id:
