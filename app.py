@@ -1,3 +1,4 @@
+
 import os
 from datetime import date, datetime
 from typing import Tuple
@@ -103,12 +104,22 @@ with st.sidebar:
 
     st.divider()
     st.header("👤 Preferencias de usuario")
-    # Permitir definir usuario por query param ?user=JP o ?u=JP
+    # Leer ?user= o ?u= desde la URL si existe (si no, queda vacío)
+    qp_user = ""
     try:
-        params = st.query_params if hasattr(st, "query_params") else st.experimental_get_query_params()
+        q = st.query_params
+        val = q.get("user") or q.get("u")
+        if isinstance(val, list):
+            qp_user = val[0] if val else ""
+        else:
+            qp_user = val or ""
     except Exception:
-        params = {}
-    qp_user = (params.get("user") or params.get("u") or [""])[0] if isinstance(params, dict) else ""
+        try:
+            q = st.experimental_get_query_params()
+            qp_user = (q.get("user") or q.get("u") or [""])[0]
+        except Exception:
+            qp_user = ""
+
     default_user = st.text_input(
         "Nombre/Iniciales para registrar (multiusuario)",
         value=(qp_user or ""),
@@ -116,10 +127,11 @@ with st.sidebar:
     )
 
     st.divider()
-    st.header("🏷️ Categorías")
+    with st.expander("🏷️ Categorías (opcional)", expanded=False):
+        st.caption("Editá estas listas solo si querés personalizar; si no, podés ignorarlo.")
 
-# Usamos comillas triple para evitar errores de comillas al copiar/pegar
-default_gastos = """Comida / Supermercado
+        # Usamos comillas triple para evitar errores de comillas al copiar/pegar
+        default_gastos = """Comida / Supermercado
 Transporte / Gasolina
 Vivienda / Renta / Hipoteca
 Servicios (agua, luz, internet, tel)
@@ -137,7 +149,7 @@ Tarjetas / Intereses / Comisiones
 Otros
 """
 
-default_ingresos = """Salario
+        default_ingresos = """Salario
 Freelance / Consultoría
 Ventas extra / Negocio
 Bonos / Aguinaldo
@@ -146,13 +158,13 @@ Reembolsos
 Otros ingresos
 """
 
-gastos_list = st.text_area("Gastos (una por línea)", value=default_gastos, height=150)
-ingresos_list = st.text_area("Ingresos (una por línea)", value=default_ingresos, height=120)
+        gastos_list = st.text_area("Gastos (una por línea)", value=default_gastos, height=150)
+        ingresos_list = st.text_area("Ingresos (una por línea)", value=default_ingresos, height=120)
 
-categorias_g = [c.strip() for c in gastos_list.splitlines() if c.strip()]
-categorias_i = [c.strip() for c in ingresos_list.splitlines() if c.strip()]
+    categorias_g = [c.strip() for c in (gastos_list if 'gastos_list' in locals() else "").splitlines() if c.strip()]
+    categorias_i = [c.strip() for c in (ingresos_list if 'ingresos_list' in locals() else "").splitlines() if c.strip()]
 
-
+# Si no hay sheet_id, detener (evita mostrar el resto)
 if not sheet_id:
     st.stop()
 
@@ -231,7 +243,7 @@ with tab1:
         st.subheader("Gasto rápido")
         with st.form("form_gasto"):
             fecha_g = st.date_input("Fecha", value=date.today())
-            cat_g = st.selectbox("Categoría", categorias_g, index=0)
+            cat_g = st.selectbox("Categoría", categorias_g or ["Comida / Supermercado"], index=0)
             monto_g = st.number_input("Monto (Q)", min_value=0.0, step=1.0)
             nota_g = st.text_input("Nota (opcional)")
             tags_g = st.text_input("Tags (separados por coma)")
@@ -261,7 +273,7 @@ with tab1:
         st.subheader("Ingreso")
         with st.form("form_ingreso"):
             fecha_i = st.date_input("Fecha", value=date.today(), key="fecha_i")
-            cat_i = st.selectbox("Categoría", categorias_i, index=0, key="cat_i")
+            cat_i = st.selectbox("Categoría", categorias_i or ["Salario"], index=0, key="cat_i")
             monto_i = st.number_input("Monto (Q)", min_value=0.0, step=1.0, key="monto_i")
             nota_i = st.text_input("Nota (opcional)", key="nota_i")
             tags_i = st.text_input("Tags (separados por coma)", key="tags_i")
@@ -433,9 +445,67 @@ with tab3:
         )
         st.altair_chart(chart, use_container_width=True)
 
-        # B) Distribución por categoría (gastos e ingresos)
-        st.markdown("### B) Distribución por categoría")
-        col1, col2 = st.columns(2)
+        # C) Tendencia (línea, últimos N meses)
+        st.markdown("### C) Tendencia (línea, últimos N meses)")
+        trend_window = st.selectbox(
+            "Rango de meses", [6, 12], index=0, format_func=lambda x: f"Últimos {x} meses"
+        )
+
+        months_line = sorted(
+            set(g.get("ym", pd.Series(dtype=str))) | set(i.get("ym", pd.Series(dtype=str)))
+        )
+        trend_sel = months_line[-trend_window:] if len(months_line) > trend_window else months_line
+
+        tg = (
+            g[g["ym"].isin(trend_sel)].groupby("ym")["monto"].sum().reset_index(name="gastos")
+            if not g.empty
+            else pd.DataFrame({"ym": trend_sel, "gastos": 0.0})
+        )
+        ti = (
+            i[i["ym"].isin(trend_sel)].groupby("ym")["monto"].sum().reset_index(name="ingresos")
+            if not i.empty
+            else pd.DataFrame({"ym": trend_sel, "ingresos": 0.0})
+        )
+
+        tdf = pd.merge(tg, ti, on="ym", how="outer").fillna(0).sort_values("ym")
+        line_long = pd.melt(
+            tdf, id_vars=["ym"], value_vars=["gastos", "ingresos"], var_name="tipo", value_name="monto"
+        )
+
+        line_chart = alt.Chart(line_long).mark_line(point=True).encode(
+            x=alt.X("ym:N", title="Mes"),
+            y=alt.Y("monto:Q", title="Monto"),
+            color=alt.Color("tipo:N", title=""),
+            tooltip=["ym", "tipo", alt.Tooltip("monto:Q", format=",.0f")],
+        )
+        line_labels = alt.Chart(line_long).mark_text(align="center", dy=-10).encode(
+            x="ym:N",
+            y="monto:Q",
+            text=alt.Text("monto:Q", format=",.0f"),
+            color="tipo:N",
+        )
+        st.altair_chart(line_chart + line_labels, use_container_width=True)
+
+        # C2) Balance mensual (barras)
+        st.markdown("### C2) Balance mensual (barras)")
+        balance_df = tdf.copy()
+        balance_df["balance"] = balance_df["ingresos"] - balance_df["gastos"]
+
+        bar = alt.Chart(balance_df).mark_bar().encode(
+            x=alt.X("ym:N", title="Mes"),
+            y=alt.Y("balance:Q", title="Balance (ingresos − gastos)"),
+            color=alt.condition(alt.datum.balance >= 0, alt.value("#2ca02c"), alt.value("#d62728")),
+            tooltip=["ym", alt.Tooltip("balance:Q", format=",.0f")],
+        ).properties(height=300)
+        bar_labels = alt.Chart(balance_df).mark_text(dy=-5).encode(
+            x="ym:N",
+            y="balance:Q",
+            text=alt.Text("balance:Q", format=",.0f"),
+        )
+        st.altair_chart(bar + bar_labels, use_container_width=True)
+
+        # D) Top categorías / tags
+        st.markdown("### D) Top categorías / tags")
         g_cat = (
             g[g["ym"].isin(sel_months)]
             .groupby("categoria")["monto"]
@@ -444,114 +514,14 @@ with tab3:
             if not g.empty
             else pd.DataFrame(columns=["categoria", "monto"])
         )
-        i_cat = (
-            i[i["ym"].isin(sel_months)]
-            .groupby("categoria")["monto"]
-            .sum()
-            .reset_index()
-            if not i.empty
-            else pd.DataFrame(columns=["categoria", "monto"])
-        )
-        with col1:
-            st.caption("Gastos por categoría")
-            if g_cat.empty:
-                st.info("Sin datos")
-            else:
-                st.altair_chart(
-                    alt.Chart(g_cat)
-                    .mark_arc(innerRadius=50)
-                    .encode(
-                        theta="monto:Q",
-                        color="categoria:N",
-                        tooltip=["categoria", "monto"],
-                    )
-                    .properties(height=320),
-                    use_container_width=True,
-                )
-        with col2:
-            st.caption("Ingresos por categoría")
-            if i_cat.empty:
-                st.info("Sin datos")
-            else:
-                st.altair_chart(
-                    alt.Chart(i_cat)
-                    .mark_arc(innerRadius=50)
-                    .encode(
-                        theta="monto:Q",
-                        color="categoria:N",
-                        tooltip=["categoria", "monto"],
-                    )
-                    .properties(height=320),
-                    use_container_width=True,
-                )
-
-        # C) Tendencia (últimos 6–12 meses)
-        st.markdown("### C) Tendencia (línea, últimos N meses)")
-# Elegir ventana de meses para la tendencia
-trend_window = st.selectbox("Rango de meses", [6, 12], index=0, format_func=lambda x: f"Últimos {x} meses")
-months_line = sorted(
-    set(g.get("ym", pd.Series(dtype=str))) | set(i.get("ym", pd.Series(dtype=str)))
-)
-trend_sel = months_line[-trend_window:] if len(months_line) > trend_window else months_line
-
-# Sumas por mes para gastos/ingresos en la ventana
-tg = (
-    g[g["ym"].isin(trend_sel)].groupby("ym")["monto"].sum().reset_index(name="gastos")
-    if not g.empty else pd.DataFrame({"ym": trend_sel, "gastos": 0.0})
-)
-ti = (
-    i[i["ym"].isin(trend_sel)].groupby("ym")["monto"].sum().reset_index(name="ingresos")
-    if not i.empty else pd.DataFrame({"ym": trend_sel, "ingresos": 0.0})
-)
-
-# Merge para línea y para balance
-tdf = pd.merge(tg, ti, on="ym", how="outer").fillna(0).sort_values("ym")
-line_long = pd.melt(tdf, id_vars=["ym"], value_vars=["gastos", "ingresos"], var_name="tipo", value_name="monto")
-
-# Línea con puntos + etiquetas numéricas
-base_line = alt.Chart(line_long).encode(
-    x=alt.X("ym:N", title="Mes"),
-    y=alt.Y("monto:Q", title="Monto"),
-    color=alt.Color("tipo:N", title=""),
-    tooltip=["ym", "tipo", alt.Tooltip("monto:Q", format=",.0f")],
-)
-line = base_line.mark_line(point=True)
-labels = base_line.mark_text(align="center", dy=-10).encode(text=alt.Text("monto:Q", format=",.0f"))
-st.altair_chart(line + labels, use_container_width=True)
-
-# C2) Balance mensual (barras, positivo/negativo) para la misma ventana
-st.markdown("### C2) Balance mensual (barras)")
-balance_df = tdf.copy()
-balance_df["balance"] = balance_df["ingresos"] - balance_df["gastos"]
-# Color condicionado por signo del balance
-bar = alt.Chart(balance_df).mark_bar().encode(
-    x=alt.X("ym:N", title="Mes"),
-    y=alt.Y("balance:Q", title="Balance (ingresos − gastos)"),
-    color=alt.condition(alt.datum.balance >= 0, alt.value("#2ca02c"), alt.value("#d62728")),
-    tooltip=["ym", alt.Tooltip("balance:Q", format=",.0f")],
-).properties(height=300)
-bar_labels = alt.Chart(balance_df).mark_text(dy=-5).encode(
-    x="ym:N", y="balance:Q", text=alt.Text("balance:Q", format=",.0f"),
-)
-st.altair_chart(bar + bar_labels, use_container_width=True)
-
-st.markdown("### D) Top categorías / tags")
         g_tags = g[g["ym"].isin(sel_months)].copy()
         if not g_tags.empty:
             g_tags["tags"] = g_tags["tags"].fillna("")
-            # expandir tags separados por coma
             exploded = []
             for _, r in g_tags.iterrows():
                 parts = [t.strip() for t in str(r.get("tags", "")).split(",") if t.strip()]
                 for t in parts:
-                    exploded.append(
-                        {
-                            "tag": t,
-                            "monto": r["monto"],
-                            "categoria": r["categoria"],
-                            "ym": r["ym"],
-                        }
-                    )
+                    exploded.append({"tag": t, "monto": r["monto"], "categoria": r["categoria"], "ym": r["ym"]})
             tags_df = pd.DataFrame(exploded)
         else:
             tags_df = pd.DataFrame(columns=["tag", "monto", "categoria", "ym"])
