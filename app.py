@@ -1,4 +1,3 @@
-
 import os
 from datetime import date, datetime
 from typing import Tuple
@@ -8,7 +7,7 @@ import pandas as pd
 import altair as alt
 
 # ==== Dependencias externas ====
-# pip install gspread google-auth
+# pip install streamlit gspread google-auth pandas altair
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -17,14 +16,11 @@ from google.oauth2.service_account import Credentials
 # ===============================
 st.set_page_config(page_title="Gastos & Ingresos — Google Sheets", page_icon="💸", layout="wide")
 st.title("💸 Registro de Gastos e Ingresos (Google Sheets)")
-st.caption("MVP multiusuario — Funciona en PC y móvil. Comparte tu hoja con el service account para sincronizar.")
+st.caption("MVP multiusuario — PC y móvil. Comparte tu hoja con el service account para sincronizar.")
 
 # -------------------------------
 # 🔐 Autenticación con Google Sheets
 # -------------------------------
-# Modo recomendado: guarda tu JSON en st.secrets["gcp_service_account"] (dict) y tu SHEET_ID en st.secrets["sheet_id"].
-# Alternativa local: sube el JSON manualmente en la barra lateral y pega el Sheet ID.
-
 def get_gspread_client() -> gspread.Client:
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -50,9 +46,7 @@ def get_gspread_client() -> gspread.Client:
             sa_info = json.load(uploaded)
 
     if sa_info is None:
-        st.warning(
-            "Sube tu service_account.json en la barra lateral o configura st.secrets['gcp_service_account']."
-        )
+        st.warning("Sube tu service_account.json en la barra lateral o configura st.secrets['gcp_service_account'].")
         st.stop()
 
     creds = Credentials.from_service_account_info(sa_info, scopes=scopes)
@@ -65,15 +59,10 @@ def get_worksheet(gc: gspread.Client, sheet_id: str, ws_title: str) -> gspread.W
         ws = sh.worksheet(ws_title)
     except gspread.exceptions.WorksheetNotFound:
         ws = sh.add_worksheet(title=ws_title, rows=1000, cols=12)
-        # Encabezados por defecto
         ws.append_row(["id", "fecha", "categoria", "monto", "nota", "tags", "usuario", "ts"])
-    # Asegurar encabezados mínimos
     headers = ws.row_values(1)
     if not headers:
-        ws.update(
-            "A1:H1",
-            [["id", "fecha", "categoria", "monto", "nota", "tags", "usuario", "ts"]],
-        )
+        ws.update("A1:H1", [["id", "fecha", "categoria", "monto", "nota", "tags", "usuario", "ts"]])
     return ws
 
 
@@ -89,25 +78,22 @@ def ensure_sheets(gc: gspread.Client, sheet_id: str) -> Tuple[gspread.Worksheet,
 with st.sidebar:
     st.header("🔗 Conexión a Google Sheets")
 
-    # Si viene desde Secrets, úsalo y evita pedirlo en móvil
     if "sheet_id" in st.secrets and st.secrets.get("sheet_id"):
         sheet_id = st.secrets.get("sheet_id")
         st.success("Usando Sheet ID desde Secrets (no necesitas pegarlo en el celular)")
         st.caption(f"Sheet conectado: {sheet_id[:6]}…{sheet_id[-4:]}")
     else:
         sheet_id = st.text_input("SHEET ID (de la URL)", value="")
-        st.caption(
-            "Ejemplo de URL: https://docs.google.com/spreadsheets/d/SELESTEID/edit … → copia la parte SELESTEID"
-        )
+        st.caption("Ejemplo: https://docs.google.com/spreadsheets/d/SELESTEID/edit → copia la parte SELESTEID")
         if not sheet_id:
             st.info("Pega tu Sheet ID para continuar.")
 
     st.divider()
     st.header("👤 Preferencias de usuario")
-    # Leer ?user= o ?u= desde la URL si existe (si no, queda vacío)
+    # Leer ?user= o ?u= desde la URL si existe
     qp_user = ""
     try:
-        q = st.query_params
+        q = st.query_params  # Streamlit recientes
         val = q.get("user") or q.get("u")
         if isinstance(val, list):
             qp_user = val[0] if val else ""
@@ -115,7 +101,7 @@ with st.sidebar:
             qp_user = val or ""
     except Exception:
         try:
-            q = st.experimental_get_query_params()
+            q = st.experimental_get_query_params()  # fallback
             qp_user = (q.get("user") or q.get("u") or [""])[0]
         except Exception:
             qp_user = ""
@@ -130,7 +116,6 @@ with st.sidebar:
     with st.expander("🏷️ Categorías (opcional)", expanded=False):
         st.caption("Editá estas listas solo si querés personalizar; si no, podés ignorarlo.")
 
-        # Usamos comillas triple para evitar errores de comillas al copiar/pegar
         default_gastos = """Comida / Supermercado
 Transporte / Gasolina
 Vivienda / Renta / Hipoteca
@@ -164,7 +149,7 @@ Otros ingresos
     categorias_g = [c.strip() for c in (gastos_list if 'gastos_list' in locals() else "").splitlines() if c.strip()]
     categorias_i = [c.strip() for c in (ingresos_list if 'ingresos_list' in locals() else "").splitlines() if c.strip()]
 
-# Si no hay sheet_id, detener (evita mostrar el resto)
+# Si no hay sheet_id, detener
 if not sheet_id:
     st.stop()
 
@@ -184,9 +169,6 @@ except Exception as e:
 # -------------------------------
 @st.cache_data(ttl=20)
 def load_df_by_name(sheet_id: str, ws_title: str) -> pd.DataFrame:
-    """Carga datos desde una worksheet de Google Sheets identificada por nombre.
-    Usa solo strings como parámetros (hashables) para evitar errores de cache.
-    """
     try:
         gc = get_gspread_client()
         sh = gc.open_by_key(sheet_id)
@@ -196,9 +178,7 @@ def load_df_by_name(sheet_id: str, ws_title: str) -> pd.DataFrame:
         values = []
 
     if not values:
-        return pd.DataFrame(
-            columns=["id", "fecha", "categoria", "monto", "nota", "tags", "usuario", "ts"]
-        )
+        return pd.DataFrame(columns=["id", "fecha", "categoria", "monto", "nota", "tags", "usuario", "ts"])
 
     df = pd.DataFrame(values[1:], columns=[c.strip() for c in values[0]])
     if not df.empty:
@@ -220,11 +200,7 @@ def next_id(ws_title: str) -> int:
 
 
 def append_row(ws: gspread.Worksheet, row: dict):
-    # Ordenar columnas conocidas
-    ordered = [
-        row.get(k, "")
-        for k in ["id", "fecha", "categoria", "monto", "nota", "tags", "usuario", "ts"]
-    ]
+    ordered = [row.get(k, "") for k in ["id", "fecha", "categoria", "monto", "nota", "tags", "usuario", "ts"]]
     ws.append_row(ordered, value_input_option="USER_ENTERED")
 
 
@@ -234,7 +210,7 @@ def append_row(ws: gspread.Worksheet, row: dict):
 tab1, tab2, tab3 = st.tabs(["➕ Registrar", "📜 Histórico", "📈 Reportes"])
 
 # ===============================
-# ➕ TAB 1: Registrar (Gasto / Ingreso)
+# ➕ TAB 1: Registrar
 # ===============================
 with tab1:
     col1, col2 = st.columns(2)
@@ -265,7 +241,7 @@ with tab1:
                     },
                 )
                 st.success(f"Gasto #{rid} guardado ✅")
-                load_df_by_name.clear()  # invalidar caché
+                load_df_by_name.clear()
             else:
                 st.error("Verifica monto (>0) y categoría.")
 
@@ -314,15 +290,9 @@ with tab2:
             max_d = gdf["fecha"].max()
             rango = st.date_input("Rango de fechas", value=(min_d, max_d))
         with c2:
-            cat_f = st.multiselect(
-                "Categorías",
-                sorted(gdf["categoria"].dropna().unique().tolist()),
-                default=[],
-            )
+            cat_f = st.multiselect("Categorías", sorted(gdf["categoria"].dropna().unique().tolist()), default=[])
         with c3:
-            user_f = st.multiselect(
-                "Usuarios", sorted(gdf["usuario"].dropna().unique().tolist()), default=[]
-            )
+            user_f = st.multiselect("Usuarios", sorted(gdf["usuario"].dropna().unique().tolist()), default=[])
 
         gview = gdf.copy()
         if isinstance(rango, tuple) and len(rango) == 2:
@@ -344,23 +314,11 @@ with tab2:
         with c1:
             min_d = idf["fecha"].min()
             max_d = idf["fecha"].max()
-            rango2 = st.date_input(
-                "Rango de fechas", value=(min_d, max_d), key="rango2"
-            )
+            rango2 = st.date_input("Rango de fechas", value=(min_d, max_d), key="rango2")
         with c2:
-            cat_f2 = st.multiselect(
-                "Categorías",
-                sorted(idf["categoria"].dropna().unique().tolist()),
-                default=[],
-                key="cat_f2",
-            )
+            cat_f2 = st.multiselect("Categorías", sorted(idf["categoria"].dropna().unique().tolist()), default=[], key="cat_f2")
         with c3:
-            user_f2 = st.multiselect(
-                "Usuarios",
-                sorted(idf["usuario"].dropna().unique().tolist()),
-                default=[],
-                key="user_f2",
-            )
+            user_f2 = st.multiselect("Usuarios", sorted(idf["usuario"].dropna().unique().tolist()), default=[], key="user_f2")
 
         iview = idf.copy()
         if isinstance(rango2, tuple) and len(rango2) == 2:
@@ -389,88 +347,142 @@ with tab3:
     g = add_period(gdf)
     i = add_period(idf)
 
-    all_months = sorted(
-        set(g.get("ym", pd.Series(dtype=str))) | set(i.get("ym", pd.Series(dtype=str)))
-    )
+    all_months = sorted(set(g.get("ym", pd.Series(dtype=str))) | set(i.get("ym", pd.Series(dtype=str))))
 
     if not all_months:
         st.info("Aún no hay datos para reportar.")
     else:
         sel_months = st.multiselect("Meses a analizar", all_months, default=all_months[-1:])
 
-        # A) Gastos vs Ingresos por mes
-        g_m = (
-            g[g["ym"].isin(sel_months)]
-            .groupby("ym")["monto"]
-            .sum()
-            .reset_index(name="gastos")
-            if not g.empty
-            else pd.DataFrame({"ym": sel_months, "gastos": 0.0})
-        )
-        i_m = (
-            i[i["ym"].isin(sel_months)]
-            .groupby("ym")["monto"]
-            .sum()
-            .reset_index(name="ingresos")
-            if not i.empty
-            else pd.DataFrame({"ym": sel_months, "ingresos": 0.0})
-        )
-        resumen = pd.merge(g_m, i_m, on="ym", how="outer").fillna(0)
+        # === Resumen por mes (para KPIs y A) ===
+        g_m = (g[g["ym"].isin(sel_months)].groupby("ym")["monto"].sum().reset_index(name="gastos")
+               if not g.empty else pd.DataFrame({"ym": sel_months, "gastos": 0.0}))
+        i_m = (i[i["ym"].isin(sel_months)].groupby("ym")["monto"].sum().reset_index(name="ingresos")
+               if not i.empty else pd.DataFrame({"ym": sel_months, "ingresos": 0.0}))
+        resumen = pd.merge(g_m, i_m, on="ym", how="outer").fillna(0).sort_values("ym")
         resumen["balance"] = resumen["ingresos"] - resumen["gastos"]
-        resumen = resumen.sort_values("ym")
 
         c1, c2, c3 = st.columns(3)
         c1.metric("Gastos (selección)", f"Q{resumen['gastos'].sum():,.2f}")
         c2.metric("Ingresos (selección)", f"Q{resumen['ingresos'].sum():,.2f}")
         c3.metric("Balance", f"Q{resumen['balance'].sum():,.2f}")
 
-        st.markdown("### A) Gastos vs Ingresos por mes")
-        long_df = pd.melt(
-            resumen,
-            id_vars=["ym"],
-            value_vars=["gastos", "ingresos", "balance"],
-            var_name="tipo",
+        # A) Ingreso vs Gasto por mes (ahorro / déficit)
+        st.markdown("### A) Ingreso vs Gasto por mes (ahorro / déficit)")
+
+        base = resumen.copy()
+        base["gasto_base"] = base[["gastos", "ingresos"]].min(axis=1)          # gasto dentro del ingreso
+        base["ahorro"] = (base["ingresos"] - base["gastos"]).clip(lower=0)     # balance positivo
+        base["deficit"] = (base["gastos"] - base["ingresos"]).clip(lower=0)    # exceso de gasto
+
+        plot_df = base[["ym", "ingresos", "gasto_base", "ahorro", "deficit"]].rename(
+            columns={"gasto_base": "Gasto", "ahorro": "Ahorro (balance +)", "deficit": "Déficit (balance −)"}
+        )
+
+        stack = plot_df.melt(
+            id_vars=["ym", "ingresos"],
+            value_vars=["Gasto", "Ahorro (balance +)", "Déficit (balance −)"],
+            var_name="Parte",
             value_name="monto",
         )
-        chart = (
-            alt.Chart(long_df)
+
+        color_scale = alt.Scale(
+            domain=["Gasto", "Ahorro (balance +)", "Déficit (balance −)"],
+            range=["#ff7f0e", "#2ca02c", "#d62728"]  # naranja, verde, rojo
+        )
+
+        bars = (
+            alt.Chart(stack)
             .mark_bar()
             .encode(
                 x=alt.X("ym:N", title="Mes"),
                 y=alt.Y("monto:Q", title="Monto"),
-                color="tipo:N",
-                tooltip=["ym", "tipo", "monto"],
+                color=alt.Color("Parte:N", scale=color_scale, title=""),
+                tooltip=[
+                    alt.Tooltip("ym:N", title="Mes"),
+                    alt.Tooltip("Parte:N"),
+                    alt.Tooltip("monto:Q", title="Monto", format=",.2f"),
+                    alt.Tooltip("ingresos:Q", title="Ingreso (100%)", format=",.2f"),
+                ],
             )
             .properties(height=320)
         )
-        st.altair_chart(chart, use_container_width=True)
+
+        # Línea discontinua al nivel del ingreso (100%)
+        ing_rule = (
+            alt.Chart(plot_df)
+            .mark_rule(color="#2ca02c", strokeDash=[4, 4])
+            .encode(x="ym:N", y=alt.Y("ingresos:Q", title=""))
+        )
+
+        st.altair_chart(bars + ing_rule, use_container_width=True)
+
+        # B) Distribución por categoría (gastos e ingresos)
+        st.markdown("### B) Distribución por categoría")
+        col1, col2 = st.columns(2)
+
+        g_cat = (g[g["ym"].isin(sel_months)].groupby("categoria")["monto"].sum().reset_index()
+                 if not g.empty else pd.DataFrame(columns=["categoria", "monto"]))
+        i_cat = (i[i["ym"].isin(sel_months)].groupby("categoria")["monto"].sum().reset_index()
+                 if not i.empty else pd.DataFrame(columns=["categoria", "monto"]))
+
+        if not g_cat.empty:
+            g_cat["pct"] = (g_cat["monto"] / g_cat["monto"].sum() * 100).fillna(0)
+        if not i_cat.empty:
+            i_cat["pct"] = (i_cat["monto"] / i_cat["monto"].sum() * 100).fillna(0)
+
+        with col1:
+            st.caption("Gastos por categoría")
+            if g_cat.empty:
+                st.info("Sin datos")
+            else:
+                st.altair_chart(
+                    alt.Chart(g_cat)
+                    .mark_arc(innerRadius=50)  # donut
+                    .encode(
+                        theta="monto:Q",
+                        color="categoria:N",
+                        tooltip=["categoria",
+                                 alt.Tooltip("monto:Q", title="Monto", format=",.0f"),
+                                 alt.Tooltip("pct:Q", title="%", format=".1f")],
+                    )
+                    .properties(height=320),
+                    use_container_width=True,
+                )
+
+        with col2:
+            st.caption("Ingresos por categoría")
+            if i_cat.empty:
+                st.info("Sin datos")
+            else:
+                st.altair_chart(
+                    alt.Chart(i_cat)
+                    .mark_arc(innerRadius=50)
+                    .encode(
+                        theta="monto:Q",
+                        color="categoria:N",
+                        tooltip=["categoria",
+                                 alt.Tooltip("monto:Q", title="Monto", format=",.0f"),
+                                 alt.Tooltip("pct:Q", title="%", format=".1f")],
+                    )
+                    .properties(height=320),
+                    use_container_width=True,
+                )
 
         # C) Tendencia (línea, últimos N meses)
         st.markdown("### C) Tendencia (línea, últimos N meses)")
-        trend_window = st.selectbox(
-            "Rango de meses", [6, 12], index=0, format_func=lambda x: f"Últimos {x} meses"
-        )
+        trend_window = st.selectbox("Rango de meses", [6, 12], index=0, format_func=lambda x: f"Últimos {x} meses")
 
-        months_line = sorted(
-            set(g.get("ym", pd.Series(dtype=str))) | set(i.get("ym", pd.Series(dtype=str)))
-        )
+        months_line = sorted(set(g.get("ym", pd.Series(dtype=str))) | set(i.get("ym", pd.Series(dtype=str))))
         trend_sel = months_line[-trend_window:] if len(months_line) > trend_window else months_line
 
-        tg = (
-            g[g["ym"].isin(trend_sel)].groupby("ym")["monto"].sum().reset_index(name="gastos")
-            if not g.empty
-            else pd.DataFrame({"ym": trend_sel, "gastos": 0.0})
-        )
-        ti = (
-            i[i["ym"].isin(trend_sel)].groupby("ym")["monto"].sum().reset_index(name="ingresos")
-            if not i.empty
-            else pd.DataFrame({"ym": trend_sel, "ingresos": 0.0})
-        )
+        tg = (g[g["ym"].isin(trend_sel)].groupby("ym")["monto"].sum().reset_index(name="gastos")
+              if not g.empty else pd.DataFrame({"ym": trend_sel, "gastos": 0.0}))
+        ti = (i[i["ym"].isin(trend_sel)].groupby("ym")["monto"].sum().reset_index(name="ingresos")
+              if not i.empty else pd.DataFrame({"ym": trend_sel, "ingresos": 0.0}))
 
         tdf = pd.merge(tg, ti, on="ym", how="outer").fillna(0).sort_values("ym")
-        line_long = pd.melt(
-            tdf, id_vars=["ym"], value_vars=["gastos", "ingresos"], var_name="tipo", value_name="monto"
-        )
+        line_long = pd.melt(tdf, id_vars=["ym"], value_vars=["gastos", "ingresos"], var_name="tipo", value_name="monto")
 
         line_chart = alt.Chart(line_long).mark_line(point=True).encode(
             x=alt.X("ym:N", title="Mes"),
@@ -479,10 +491,7 @@ with tab3:
             tooltip=["ym", "tipo", alt.Tooltip("monto:Q", format=",.0f")],
         )
         line_labels = alt.Chart(line_long).mark_text(align="center", dy=-10).encode(
-            x="ym:N",
-            y="monto:Q",
-            text=alt.Text("monto:Q", format=",.0f"),
-            color="tipo:N",
+            x="ym:N", y="monto:Q", text=alt.Text("monto:Q", format=",.0f"), color="tipo:N",
         )
         st.altair_chart(line_chart + line_labels, use_container_width=True)
 
@@ -498,22 +507,14 @@ with tab3:
             tooltip=["ym", alt.Tooltip("balance:Q", format=",.0f")],
         ).properties(height=300)
         bar_labels = alt.Chart(balance_df).mark_text(dy=-5).encode(
-            x="ym:N",
-            y="balance:Q",
-            text=alt.Text("balance:Q", format=",.0f"),
+            x="ym:N", y="balance:Q", text=alt.Text("balance:Q", format=",.0f"),
         )
         st.altair_chart(bar + bar_labels, use_container_width=True)
 
         # D) Top categorías / tags
         st.markdown("### D) Top categorías / tags")
-        g_cat = (
-            g[g["ym"].isin(sel_months)]
-            .groupby("categoria")["monto"]
-            .sum()
-            .reset_index()
-            if not g.empty
-            else pd.DataFrame(columns=["categoria", "monto"])
-        )
+        g_cat2 = (g[g["ym"].isin(sel_months)].groupby("categoria")["monto"].sum().reset_index()
+                  if not g.empty else pd.DataFrame(columns=["categoria", "monto"]))
         g_tags = g[g["ym"].isin(sel_months)].copy()
         if not g_tags.empty:
             g_tags["tags"] = g_tags["tags"].fillna("")
@@ -529,35 +530,26 @@ with tab3:
         colA, colB = st.columns(2)
         with colA:
             st.caption("Top categorías (gastos)")
-            top_cat = g_cat.sort_values("monto", ascending=False).head(10)
+            top_cat = g_cat2.sort_values("monto", ascending=False).head(10)
             st.dataframe(top_cat, use_container_width=True)
         with colB:
             st.caption("Top tags (gastos)")
             if tags_df.empty:
                 st.info("Sin tags en los meses seleccionados")
             else:
-                top_tags = (
-                    tags_df.groupby("tag")["monto"].sum().reset_index().sort_values("monto", ascending=False).head(10)
-                )
+                top_tags = tags_df.groupby("tag")["monto"].sum().reset_index().sort_values("monto", ascending=False).head(10)
                 st.dataframe(top_tags, use_container_width=True)
 
         # E) Comparar mes actual vs anterior
         st.markdown("### E) Comparar mes actual vs anterior")
         if len(all_months) >= 2:
-            last_m = all_months[-1]
-            prev_m = all_months[-2]
-            g_last = g[g["ym"] == last_m]["monto"].sum()
-            g_prev = g[g["ym"] == prev_m]["monto"].sum()
-            i_last = i[i["ym"] == last_m]["monto"].sum()
-            i_prev = i[i["ym"] == prev_m]["monto"].sum()
+            last_m = all_months[-1]; prev_m = all_months[-2]
+            g_last = g[g["ym"] == last_m]["monto"].sum(); g_prev = g[g["ym"] == prev_m]["monto"].sum()
+            i_last = i[i["ym"] == last_m]["monto"].sum(); i_prev = i[i["ym"] == prev_m]["monto"].sum()
             bc1, bc2, bc3 = st.columns(3)
             bc1.metric(f"Gasto {last_m}", f"Q{g_last:,.2f}", delta=f"{(g_last - g_prev):+.2f}")
             bc2.metric(f"Ingreso {last_m}", f"Q{i_last:,.2f}", delta=f"{(i_last - i_prev):+.2f}")
-            bc3.metric(
-                f"Balance {last_m}",
-                f"Q{(i_last - g_last):,.2f}",
-                delta=f"{(i_last - g_last) - (i_prev - g_prev):+.2f}",
-            )
+            bc3.metric(f"Balance {last_m}", f"Q{(i_last - g_last):,.2f}", delta=f"{(i_last - g_last) - (i_prev - g_prev):+.2f}")
         else:
             st.info("Registra al menos dos meses para comparar.")
 
